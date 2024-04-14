@@ -1,3 +1,6 @@
+!pip install wikipedia-api
+!pip install aiogram
+
 import asyncio
 
 from wikipediaapi import Wikipedia
