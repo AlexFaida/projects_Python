@@ -1,1 +1,33 @@
-Python telegram bots
+@dp.message(CommandStart())
+async def start(message: Message):
+    
+    await message.answer_photo(
+        photo="https://te.legra.ph/file/72e602045e29a0f5ec882.jpg",
+        caption=start_text,
+    )
+
+@dp.message(F.text)
+async def wwiki(message: Message): 
+    query = message.text
+    page = wiki.page(query)
+    msg = await message.answer("🔎 <b>Поиск информации...</b>")
+    await asyncio.sleep(0.5)
+    if page.exists():
+        await message.answer(f"<b>🌐 {page.title}:\n\n{page.summary}\n\n<b>Полная информация:</b> -> <a href='{page.fullurl}'>Клик</a></b>")
+        await msg.delete()
+    else:
+        await message.reply("🚫 <b>К сожалению, я не смог найти информацию по этому запросу.</b>")
+        await msg.delete()
+
+
+async def main():
+    bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    print("Бот запущен!")
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print(e)
