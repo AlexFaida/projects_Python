@@ -1,3 +1,21 @@
+import asyncio
+
+from wikipediaapi import Wikipedia
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+
+wiki = Wikipedia(language="ru", user_agent="Your_User_Agent_String")
+dp = Dispatcher()
+
+
+TOKEN = getenv("BOT_TOKEN", "YOUR_TOKEN_IS_HERE")
+start_text = """
+<b>🐈‍⬛ Привет! Бот Википедия предоставляет быстрый и удобный доступ к информации из Википедии.
+Узнавайте интересные факты, исследуйте различные темы и получайте надежную и проверенную информацию, используя моего бота Википедию.</b>
+"""
+
 @dp.message(CommandStart())
 async def start(message: Message):
     
