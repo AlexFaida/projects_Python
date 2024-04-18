@@ -1,0 +1,121 @@
+!pip install aiogram
+import nest_asyncio
+nest_asyncio.apply()
+import sqlite3
+import aiohttp
+import asyncio
+
+from os import getenv
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.filters import Command, CommandStart, CommandObject
+from aiogram.types import Message
+from aiogram.enums import ParseMode
+
+storage = MemoryStorage()
+
+dp = Dispatcher(storage=storage)
+connection = sqlite3.connect("data.db")
+q = connection.cursor()
+
+
+q.execute("""CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                nickname TEXT,
+                city TEXT
+            )""")
+connection.commit()
+
+
+@dp.message(CommandStart())
+async def start(message: Message):
+    caption = (
+        "<b>Привет! Я weather_bot. Введите название вашего города.</b>\n\n"
+        "<b>Введите команду:</b> <code>/weather_city Город</code>\n"
+        "<b>Затем отправьте эту команду, чтобы узнать погоду</b>: <code>/weather</code>."
+    )
+    await message.answer_photo(
+        photo = 'https://www.cmegroup.com/trading/weather/images/weather-700x180.jpg',
+        caption=caption,
+    )
+@dp.message(Command("weather_city"))
+async def weather_city(message: Message, command: CommandObject):
+    args = command.args
+    city = args.strip()
+
+    if not city:
+        return await message.answer("<b>🚫 Вы не указали город в команде. Вот пример того, как это сделать: <code>/weather_city Ташкент</code></b>")
+
+    user_id = message.from_user.id
+    username = message.from_user.username
+    nickname = message.from_user.first_name
+
+    q.execute("INSERT OR IGNORE INTO users (user_id, username, nickname) VALUES (?, ?, ?)", (user_id, username, nickname))
+    q.execute("UPDATE users SET city = ? WHERE user_id = ?", (city, user_id))
+    connection.commit()
+
+    await message.answer(f"<b> 🫶 Ваш текущий город</b>: <code>{city}</code>")
+
+
+@dp.message(Command("weather"))
+async def weather(message: Message):
+    user_id = message.from_user.id
+    q.execute("SELECT city FROM users WHERE user_id = ?", (user_id,))
+    result = q.fetchone()
+    city = result[0] if result else None
+
+    if not city:
+        return await message.answer("<b>🚫 Город по умолчанию не установлен. Используйте команду /weather_city [город], чтобы установить город по умолчанию.</b>")
+
+    api_key = "YOUR_OPEN_WEATHER_TOKEN"
+    units = "metric"
+    api_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units={units}"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url) as response:
+                response.raise_for_status()
+                weather_data = await response.json()
+
+        temperature = weather_data["main"]["temp"]
+        humidity = weather_data["main"]["humidity"]
+        wind_speed = weather_data["wind"]["speed"]
+        weather_description = weather_data["weather"][0]["description"]
+
+        t_emoji = "🌡" if temperature > 0 else "❄️"
+
+        weather_img = {
+            "clear sky": "https://vgorode.ua/img/article/2612/74_main-v1566339667.jpg",
+            "smoke": "https://itd3.mycdn.me/image?id=836731980264&t=20&plc=WEB&tkn=*nUvA0MhNdy2Ptc4sJFucoDi2V2Q",
+            "scattered clouds": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTA1ZnVle-92XHl8DuZicEUj-Cj4XMv625jWA&s",
+            "few clouds": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmYOMkD1s1fQu1rlVJBCa4gwjBh6hIIdZtAw&s",
+        }
+
+        photo_url = weather_img.get(weather_description, "https://i.pinimg.com/originals/1a/fa/78/1afa78467485e10e3a3ada4962e2a86a.jpg")
+        caption = (
+            "<b>❔ Вот погода в вашем городе</b>:\n\n"
+            f"<pre><code class='language-weather'>🌤 <b>Город</b>: {city}\n"
+            f"{t_emoji} <b>Температура:</b> <u>{temperature}°C</u>\n"
+            f"💧 <b>Влажность</b>: {humidity}%\n"
+            f"💨 <b>Скорость ветра</b>: {wind_speed} м/с\n"
+            f"☀️ <b>Описание:</b> {weather_description}</code></pre>\n"
+        )
+        await message.answer_photo(photo=photo_url, caption=caption)
+
+    except aiohttp.ClientError:
+        await message.answer(f"<b>🚫 Ошибка при получении данных о погоде. Пожалуйста, попробуйте позже.</b>")
+
+
+async def main():
+    TOKEN = getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+    bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    print("Бот запущен!")
+    try:
+        asyncio.run(main())
+    finally:
+        connection.close()
